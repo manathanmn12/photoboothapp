@@ -416,6 +416,7 @@
   $("#layoutGrid").addEventListener("click",e=>{
     const b=e.target.closest("[data-layout]"); if(!b)return;
     layout=LAYOUTS.find(l=>l.id===b.dataset.layout);
+    updateSession({layout_chosen: layout.id});
     $$("#layoutGrid .layout").forEach(x=>x.classList.remove("sel"));
     b.classList.add("sel");
     buildSlots();
@@ -489,14 +490,20 @@
   $("#stickerChips").innerHTML=STICKERS.map(s=>`<button class="chip sticker-pick" data-s="${s}">${s}</button>`).join("");
 
   $("#themeChips").addEventListener("click",e=>{const b=e.target.closest("[data-t]");if(!b)return;
+    updateSession({theme_chosen:b.dataset.t});
     theme=THEMES.find(t=>t.id===b.dataset.t); filterTint=theme.filter||null; mono=!!theme.mono;
     selOne("#themeChips",b);
     // themes set the color/filter only — the border you chose stays put
     if(theme.vibe && !objs.some(o=>o.type==="text"&&o._themeVibe)){ addText(theme.vibe,true); }
     renderPreview();
   });
-  $("#borderChips").addEventListener("click",e=>{const b=e.target.closest("[data-b]");if(!b)return;border=b.dataset.b;selOne("#borderChips",b);renderPreview();});
-  $("#stickerChips").addEventListener("click",e=>{const b=e.target.closest("[data-s]");if(!b)return;addSticker(b.dataset.s);});
+  $("#borderChips").addEventListener("click",e=>{const b=e.target.closest("[data-b]");if(!b)return;border=b.dataset.b;selOne("#borderChips",b);renderPreview();
+    updateSession({border_chosen:b.dataset.b});
+  });
+  $("#stickerChips").addEventListener("click",e=>{const b=e.target.closest("[data-s]");if(!b)return;addSticker(b.dataset.s);
+    sessionData.stickers_added=(sessionData.stickers_added||0)+1;
+    updateSession({stickers_added:sessionData.stickers_added});
+  });
   function selOne(wrap,b){$$(`${wrap} .chip`).forEach(x=>x.classList.remove("sel"));b.classList.add("sel");}
 
   // ----- draggable objects (text + stickers) live as DOM in #layer, baked at share -----
@@ -573,7 +580,9 @@
   $("#stage").addEventListener("pointerdown",ev=>{ if(ev.target===$("#stage")||ev.target===$("#previewImg")||ev.target===$("#layer")) selectObj(null); });
 
   // add custom text
-  $("#addTextBtn").addEventListener("click",()=>{ const v=$("#textInput").value.trim(); if(!v){toast("Type something first");return;} addText(v,false); $("#textInput").value=""; });
+  $("#addTextBtn").addEventListener("click",()=>{ const v=$("#textInput").value.trim(); if(!v){toast("Type something first");return;} addText(v,false); $("#textInput").value="";
+    updateSession({text_added:true, custom_text:v});
+  });
 
   // ----- render the photo background into the preview (objects float above as DOM) -----
   function renderPreview(){ drawBase(); try{ $("#previewImg").src=$("#c").toDataURL("image/png"); }catch(e){}
@@ -697,7 +706,13 @@
     try{
       await buildImage();
       // push to shared event wall (Supabase) — fire and forget
-      try{ pushToWall($("#c").toDataURL("image/png"), lastCap); noteMyShare(); }catch(_){}
+      try{
+        const now=new Date().toISOString();
+        const dur=Math.round((new Date(now)-new Date(sessionData.started_at))/1000);
+        updateSession({share_completed:true,completed_at:now,session_duration_seconds:dur,caption_text:lastCap});
+        pushToWall($("#c").toDataURL("image/png"), lastCap);
+        noteMyShare();
+      }catch(_){}
       const shared=await tryNativeShare();
       if(!shared) showResultOverlay();
     }catch(err){
@@ -718,6 +733,7 @@
     const b0=$('#borderChips [data-b="none"]'); if(b0) selOne("#borderChips",b0);
   }
   $("#roAgain").addEventListener("click",()=>{
+    updateSession({made_another:true});
     const pb=$("#roPosBadge"); if(pb){ pb.classList.remove("show"); pb.textContent=""; }
     $("#resultOverlay").classList.remove("on");
     resetCreation();
@@ -830,6 +846,8 @@
   $("#floatCards").addEventListener("click",e=>{
     const b=e.target.closest("[data-emoji]"); if(!b) return;
     const emoji=b.dataset.emoji;
+    sessionData.emoji_taps[emoji]=(sessionData.emoji_taps[emoji]||0)+1;
+    updateSession({emoji_taps:sessionData.emoji_taps});
 
     // 1 — spin + pop animation
     b.classList.remove("tapped");
@@ -855,9 +873,55 @@
 
   // ===== EVENT WALL — auto-uploads every photo to Supabase =====
   // Paste your Supabase keys to enable the shared event wall display:
-  const SUPA_URL = "";       // e.g. "https://abcdef.supabase.co"
-  const SUPA_KEY = "";       // your anon public key
+  const SUPA_URL = "https://vylxwrvxmozxvbctrhll.supabase.co";       // e.g. "https://abcdef.supabase.co"
+  const SUPA_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZ5bHh3cnZ4bW96eHZiY3RyaGxsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA1MzA0NDYsImV4cCI6MjA5NjEwNjQ0Nn0.DUwRPoMoKhnOQpnv8p52fHlIBxodTyWUsWtrJf5_3xc";       // your anon public key
   const SUPA_READY = SUPA_URL && SUPA_KEY;
+
+  // ===== SESSION TRACKING =====
+  const SESSION_ID = "s_" + Date.now() + "_" + Math.random().toString(36).slice(2,6);
+  const sessionData = {
+    session_id: SESSION_ID,
+    event_name: EVENT || "OxygenBar360",
+    src: SRC,
+    started_at: new Date().toISOString(),
+    layout_chosen: null,
+    theme_chosen: "clean",
+    border_chosen: "none",
+    stickers_added: 0,
+    text_added: false,
+    custom_text: null,
+    caption_text: null,
+    emoji_taps: {},
+    made_another: false,
+    share_completed: false,
+    session_duration_seconds: null,
+    completed_at: null
+  };
+
+  function trackSession(extra){
+    if(!SUPA_READY) return;
+    const payload = Object.assign({}, sessionData, extra||{});
+    fetch(SUPA_URL+"/rest/v1/booth_sessions",{
+      method:"POST",
+      headers:{"apikey":SUPA_KEY,"Authorization":"Bearer "+SUPA_KEY,
+        "Content-Type":"application/json","Prefer":"return=minimal"},
+      body:JSON.stringify(payload)
+    }).catch(()=>{});
+  }
+
+  function updateSession(extra){
+    if(!SUPA_READY) return;
+    Object.assign(sessionData, extra);
+    fetch(SUPA_URL+"/rest/v1/booth_sessions?session_id=eq."+SESSION_ID,{
+      method:"PATCH",
+      headers:{"apikey":SUPA_KEY,"Authorization":"Bearer "+SUPA_KEY,
+        "Content-Type":"application/json","Prefer":"return=minimal"},
+      body:JSON.stringify(extra)
+    }).catch(()=>{});
+  }
+
+  // Push initial session row when app loads
+  if(SUPA_READY) setTimeout(()=>trackSession(), 500);
 
   // warm position vocabulary — matches the event wall (no losers)
   function positionBadge(n){
