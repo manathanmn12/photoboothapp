@@ -390,7 +390,8 @@
 
   // ----- optional event branding via URL (?event=Acme%20Day&handle=@acme) -----
   const q=new URLSearchParams(location.search);
-  const EVENT=q.get("event")||"";
+  let EVENT=q.get("event")||"";   // may be filled from Supabase active-event if blank
+  const EVENT_FROM_URL = !!q.get("event");
   const EVENT_HANDLE=q.get("handle")||"";
   const HANDLE="@oxygenbar360";
   // entry method: how the guest arrived — "qr", "nfc", or unknown.
@@ -417,6 +418,8 @@
     const b=e.target.closest("[data-layout]"); if(!b)return;
     layout=LAYOUTS.find(l=>l.id===b.dataset.layout);
     updateSession({layout_chosen: layout.id});
+    logEventOnce("Experience Engaged","start");
+    logEvent("Layout Picked", layout.id);
     $$("#layoutGrid .layout").forEach(x=>x.classList.remove("sel"));
     b.classList.add("sel");
     buildSlots();
@@ -449,6 +452,8 @@
       const img=new Image();
       img.onload=()=>{
         photos[activeSlot]=img;
+        logEventOnce("Photo Captured");
+        sessionData.photos_taken=(sessionData.photos_taken||0)+1;
         const slot=$(`[data-slot="${activeSlot}"]`);
         slot.classList.add("filled");
         slot.innerHTML=`<img src="${ev.target.result}"><span class="hint">tap to change</span>`;
@@ -491,6 +496,7 @@
 
   $("#themeChips").addEventListener("click",e=>{const b=e.target.closest("[data-t]");if(!b)return;
     updateSession({theme_chosen:b.dataset.t});
+    logEventOnce("Styled","theme:"+b.dataset.t);
     theme=THEMES.find(t=>t.id===b.dataset.t); filterTint=theme.filter||null; mono=!!theme.mono;
     selOne("#themeChips",b);
     // themes set the color/filter only — the border you chose stays put
@@ -710,6 +716,7 @@
         const now=new Date().toISOString();
         const dur=Math.round((new Date(now)-new Date(sessionData.started_at))/1000);
         updateSession({share_completed:true,completed_at:now,session_duration_seconds:dur,caption_text:lastCap});
+        logEvent("Photo Shared");
         pushToWall($("#c").toDataURL("image/png"), lastCap);
         noteMyShare();
       }catch(_){}
@@ -848,6 +855,7 @@
     const emoji=b.dataset.emoji;
     sessionData.emoji_taps[emoji]=(sessionData.emoji_taps[emoji]||0)+1;
     updateSession({emoji_taps:sessionData.emoji_taps});
+    logEventOnce("Experience Engaged","emoji");
 
     // 1 — spin + pop animation
     b.classList.remove("tapped");
@@ -921,7 +929,59 @@
   }
 
   // Push initial session row when app loads
-  if(SUPA_READY) setTimeout(()=>trackSession(), 500);
+  // (initial trackSession + Session Started now fire together after resolveActiveEvent below)
+
+  // ===== EVENT STREAM (elite analytics taxonomy) =====
+  // token_id lets you track individual QR/NFC tokens for the leaderboard: ?token=table3
+  const TOKEN_ID = q.get("token") || "";
+  let firedEvents = {};  // dedupe one-time events per session
+
+  function logEvent(name, value){
+    if(!SUPA_READY) return;
+    fetch(SUPA_URL+"/rest/v1/booth_events",{
+      method:"POST",
+      headers:{"apikey":SUPA_KEY,"Authorization":"Bearer "+SUPA_KEY,
+        "Content-Type":"application/json","Prefer":"return=minimal"},
+      body:JSON.stringify({
+        session_id: SESSION_ID,
+        event_name: name,
+        event_value: value || null,
+        src: SRC,
+        token_id: TOKEN_ID || null,
+        evt_event_name: EVENT || "OxygenBar360",
+        created_at: new Date().toISOString()
+      })
+    }).catch(()=>{});
+  }
+  function logEventOnce(name, value){
+    if(firedEvents[name]) return;
+    firedEvents[name] = true;
+    logEvent(name, value);
+  }
+
+  // TOP OF FUNNEL: every scan/tap that loads the page = Session Started
+  // If the URL had no ?event=, resolve the dashboard's currently-active event first,
+  // so a single permanent QR code always tags scans to the right event.
+  async function resolveActiveEvent(){
+    if(EVENT_FROM_URL || !SUPA_READY) return;  // URL event wins; nothing to resolve
+    try{
+      const r=await fetch(SUPA_URL+"/rest/v1/event_archive?summary->>active=eq.true&select=event_name,archived_at&order=archived_at.desc&limit=1",
+        {headers:{"apikey":SUPA_KEY,"Authorization":"Bearer "+SUPA_KEY}});
+      const rows=await r.json();
+      if(rows&&rows.length&&rows[0].event_name){
+        EVENT=rows[0].event_name;
+        sessionData.event_name=EVENT;
+        if($("#evEyebrow")) $("#evEyebrow").textContent=EVENT;
+      }
+    }catch(_){}
+  }
+
+  if(SUPA_READY){
+    resolveActiveEvent().then(()=>{
+      trackSession();
+      logEvent("Session Started");
+    });
+  }
 
   // warm position vocabulary — matches the event wall (no losers)
   function positionBadge(n){
