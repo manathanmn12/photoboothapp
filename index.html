@@ -715,8 +715,11 @@
       try{
         const now=new Date().toISOString();
         const dur=Math.round((new Date(now)-new Date(sessionData.started_at))/1000);
-        updateSession({share_completed:true,completed_at:now,session_duration_seconds:dur,caption_text:lastCap});
+        photosMade++;
+        updateSession({share_completed:true,completed_at:now,session_duration_seconds:dur,caption_text:lastCap,
+          photos_made:photosMade, made_another:sessionData.made_another||photosMade>=2});
         logEvent("Photo Shared");
+        if(photosMade>=2) logEvent("Repeat Photo","photo #"+photosMade);
         pushToWall($("#c").toDataURL("image/png"), lastCap);
         noteMyShare();
       }catch(_){}
@@ -741,6 +744,7 @@
   }
   $("#roAgain").addEventListener("click",()=>{
     updateSession({made_another:true});
+    logEvent("Made Another");
     const pb=$("#roPosBadge"); if(pb){ pb.classList.remove("show"); pb.textContent=""; }
     $("#resultOverlay").classList.remove("on");
     resetCreation();
@@ -748,7 +752,7 @@
     renderPresetChips();       // fresh caption suggestions
     show("layout");            // straight back to the template picker
   });
-  $("#restartBtn").addEventListener("click",()=>{ resetCreation(); show("welcome"); });
+  $("#restartBtn").addEventListener("click",()=>{ logEvent("Started Over",photosMade>0?"after-share":"mid-flow"); resetCreation(); show("welcome"); });
 
   // reposition objects if the screen rotates / resizes
   window.addEventListener("resize",()=>objs.forEach(applyObj));
@@ -887,6 +891,7 @@
 
   // ===== SESSION TRACKING =====
   const SESSION_ID = "s_" + Date.now() + "_" + Math.random().toString(36).slice(2,6);
+  let photosMade = 0;   // photos completed this session — powers repeat-creation tracking
   const sessionData = {
     session_id: SESSION_ID,
     event_name: EVENT || "OxygenBar360",
@@ -901,6 +906,7 @@
     caption_text: null,
     emoji_taps: {},
     made_another: false,
+    photos_made: 0,
     share_completed: false,
     session_duration_seconds: null,
     completed_at: null
