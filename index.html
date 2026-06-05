@@ -116,6 +116,9 @@
   .btn:active{transform:scale(.98)}
   .btn.ghost{background:var(--glass);color:var(--ink);border:1px solid var(--stroke-2);box-shadow:none}
   .linklike{background:none;border:none;color:var(--ink-faint);font-family:inherit;font-size:14px;cursor:pointer;text-decoration:underline;text-underline-offset:3px}
+  /* secondary "start over" — visible button, but clearly below the main CTA */
+  .btn.ghost.start-over{margin-top:10px;padding:13px 22px;font-size:15px;color:var(--ink-soft);border-color:var(--stroke-2)}
+  .btn.ghost.start-over:active{color:var(--ink)}
 
   /* layout picker */
   .layouts{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:26px}
@@ -343,7 +346,7 @@
     <div class="step-dots"><span></span><span></span><span class="on"></span></div>
     <div class="foot">
       <button class="btn" id="shareBtn">Share my moment ✦</button>
-      <button class="linklike" id="restartBtn">Start over</button>
+      <button class="btn ghost start-over" id="restartBtn">↺ Start over</button>
     </div>
   </section>
 
