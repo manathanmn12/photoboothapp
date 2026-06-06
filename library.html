@@ -1,0 +1,449 @@
+<!DOCTYPE html>
+<!-- ============================================================
+  OxygenBar360 — EVENT PHOTO LIBRARY (one page, every event)
+  The organizer's keepsake gallery: every booth photo from their
+  event, lazy-loaded, downloadable, and shareable company-wide.
+
+  ONE deployed page serves all events. The event is chosen by URL:
+      OB360-Event-Photo-Library.html?event=Acme%20Summer%20Bash
+  The NFC keychain / QR / post-event email point at that per-event
+  URL. No per-event file to generate.
+
+  Data source: booth_photos in the Photo Booth Supabase project
+  (public read policy). Each photo is a base64 PNG in image_url.
+  Manifest (ids/captions/dates) loads first — tiny; full images
+  stream in on scroll so phones don't choke on the ~3MB files.
+
+  See OB360-Event-Photo-Library-NOTES.md for wiring + limitations.
+============================================================ -->
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Event Photo Library — OxygenBar360</title>
+<style>
+  /* ===== GHL WHITESPACE FIX — always ships first ===== */
+  html, body { margin: 0 !important; padding: 0 !important; }
+  body .c-section, body .c-wrapper, body .inner,
+  body .section-wrap, body .row-wrap, body .col-wrap,
+  body .fullSection, body .noBorder {
+    margin-top: 0 !important; padding-top: 0 !important;
+  }
+  /* ===== end whitespace fix ===== */
+</style>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,500;0,600;1,500&family=Lato:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  :root { --bg-top:#0A1B1B; --bg-bot:#112E2A; --cyan:#45D9C5; --cream:#F3EBDB; --panel:rgba(19,51,47,0.55); }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    background: linear-gradient(180deg, var(--bg-top) 0%, var(--bg-bot) 100%);
+    background-attachment: fixed;
+    font-family: 'Lato', Arial, sans-serif; color: var(--cream);
+    -webkit-font-smoothing: antialiased; min-height: 100vh;
+  }
+  .dotgrid { position: fixed; inset: 0; pointer-events: none; z-index: 0;
+    background-image: radial-gradient(rgba(243,235,219,0.05) 1px, transparent 1px);
+    background-size: 16px 16px; }
+  .ring { position: fixed; border: 1px solid rgba(243,235,219,0.06); border-radius: 50%; pointer-events: none; z-index: 0; }
+  .ring1 { width: 340px; height: 340px; top: -90px; right: -110px; }
+  .ring2 { width: 260px; height: 260px; bottom: -70px; left: -90px; }
+  .wrap { position: relative; z-index: 1; max-width: 980px; margin: 0 auto; padding: 48px 20px 72px; }
+
+  /* ---- header ---- */
+  .head { text-align: center; }
+  .badge { display: inline-flex; align-items: center; gap: 8px;
+    background: rgba(19,51,47,0.85); border: 1px solid rgba(243,235,219,0.22);
+    border-radius: 999px; padding: 7px 16px; font-weight: 600; font-size: 13px; }
+  .badge .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--cyan); }
+  .eyebrow { margin: 34px 0 12px; font-size: 11px; font-weight: 600; letter-spacing: 0.32em; color: rgba(243,235,219,0.55); }
+  h1 { font-family: 'Lora', Georgia, serif; font-weight: 500; font-size: clamp(30px, 5.5vw, 44px); line-height: 1.14; margin: 0 0 12px; }
+  h1 .accent { font-style: italic; color: var(--cyan); }
+  .sub { font-size: 15px; line-height: 1.65; color: rgba(243,235,219,0.78); max-width: 460px; margin: 0 auto; }
+  .stat { margin-top: 18px; font-size: 12px; font-weight: 700; letter-spacing: 0.16em; color: rgba(243,235,219,0.55); text-transform: uppercase; }
+
+  /* ---- toolbar ---- */
+  .toolbar { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; margin: 28px 0 6px; }
+  .btn { display: inline-flex; align-items: center; gap: 8px; border: 0; cursor: pointer;
+    border-radius: 999px; padding: 13px 24px; font-weight: 700; font-size: 14px;
+    font-family: 'Lato', sans-serif; text-decoration: none; letter-spacing: 0.02em; transition: transform .15s ease; }
+  .btn:hover { transform: translateY(-1px); }
+  .btn:disabled { opacity: 0.5; cursor: default; transform: none; }
+  .btn-primary { background: var(--cyan); color: #07211e; box-shadow: 0 10px 28px rgba(69,217,197,0.26); }
+  .btn-ghost { background: transparent; border: 1px solid rgba(243,235,219,0.35); color: var(--cream); }
+
+  /* ---- grid ---- */
+  .grid { margin-top: 30px; display: grid; gap: 12px;
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+  .tile { position: relative; margin: 0; border-radius: 14px; overflow: hidden;
+    aspect-ratio: 9 / 16; background: var(--panel);
+    border: 1px solid rgba(243,235,219,0.08); cursor: pointer; }
+  .tile .ph { position: absolute; inset: 0;
+    background: linear-gradient(100deg, rgba(243,235,219,0.04) 30%, rgba(69,217,197,0.10) 50%, rgba(243,235,219,0.04) 70%);
+    background-size: 220% 100%; animation: shimmer 1.5s linear infinite; }
+  @keyframes shimmer { 0% { background-position: 120% 0; } 100% { background-position: -120% 0; } }
+  .tile img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover;
+    opacity: 0; transition: opacity .35s ease; }
+  .tile.loaded img { opacity: 1; }
+  .tile.loaded .ph { display: none; }
+  .tile figcaption { position: absolute; left: 0; right: 0; bottom: 0; z-index: 2;
+    font-size: 11.5px; line-height: 1.3; padding: 22px 10px 9px; color: var(--cream);
+    background: linear-gradient(transparent, rgba(7,19,18,0.82)); opacity: 0; transition: opacity .25s; }
+  .tile.loaded figcaption:not(:empty) { opacity: 1; }
+  .tile .zoom { position: absolute; top: 8px; right: 8px; z-index: 2; width: 26px; height: 26px;
+    border-radius: 50%; background: rgba(7,19,18,0.55); display: flex; align-items: center; justify-content: center;
+    opacity: 0; transition: opacity .2s; }
+  .tile:hover .zoom { opacity: 1; }
+
+  /* ---- states ---- */
+  .state { text-align: center; margin: 60px auto; max-width: 460px; color: rgba(243,235,219,0.75); }
+  .state h2 { font-family: 'Lora', serif; color: var(--cream); font-weight: 500; font-size: 24px; margin: 0 0 10px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; margin-top: 22px; }
+  .chip { background: var(--panel); border: 1px solid rgba(69,217,197,0.3); color: var(--cream);
+    border-radius: 999px; padding: 9px 16px; font-size: 13px; font-weight: 600; text-decoration: none; }
+  .chip:hover { border-color: var(--cyan); }
+  .chip small { display: block; font-weight: 400; font-size: 10.5px; color: rgba(243,235,219,0.5); letter-spacing: .04em; }
+
+  /* ---- footer ---- */
+  footer { margin-top: 64px; text-align: center; border-top: 1px solid rgba(243,235,219,0.1); padding-top: 40px; }
+  .ff { max-width: 460px; margin: 0 auto 26px; font-size: 14.5px; line-height: 1.65; color: rgba(243,235,219,0.8); }
+  .ff b { color: var(--cyan); }
+  footer .tagline { font-family: 'Lora', Georgia, serif; font-style: italic; font-size: 17px; color: var(--cyan); margin-top: 26px; }
+  footer .site { font-size: 13px; font-weight: 600; color: rgba(243,235,219,0.72); margin-top: 8px; }
+  footer .hri { font-size: 9px; font-weight: 700; letter-spacing: 0.3em; color: rgba(243,235,219,0.35); margin-top: 10px; }
+
+  /* ---- lightbox ---- */
+  .lb { position: fixed; inset: 0; z-index: 50; background: rgba(5,14,13,0.94); display: none;
+    align-items: center; justify-content: center; flex-direction: column; padding: 18px; }
+  .lb.on { display: flex; }
+  .lb img { max-width: 100%; max-height: 78vh; border-radius: 12px; object-fit: contain;
+    box-shadow: 0 24px 70px rgba(0,0,0,0.6); }
+  .lb-bar { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; justify-content: center; margin-top: 16px; }
+  .lb-cap { font-family: 'Lora', serif; font-style: italic; color: rgba(243,235,219,0.85); font-size: 14px; max-width: 60vw; }
+  .lb-close { position: absolute; top: 14px; right: 16px; background: rgba(243,235,219,0.1);
+    border: 1px solid rgba(243,235,219,0.25); color: var(--cream); width: 40px; height: 40px;
+    border-radius: 50%; font-size: 18px; cursor: pointer; }
+  .lb-nav { position: absolute; top: 50%; transform: translateY(-50%); background: rgba(243,235,219,0.08);
+    border: 1px solid rgba(243,235,219,0.22); color: var(--cream); width: 46px; height: 46px;
+    border-radius: 50%; font-size: 26px; line-height: 1; cursor: pointer; }
+  .lb-nav.prev { left: 14px; } .lb-nav.next { right: 14px; }
+  .lb-nav:disabled { opacity: 0.25; cursor: default; }
+
+  /* ---- toast / progress ---- */
+  .toast { position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%); z-index: 60;
+    background: rgba(19,51,47,0.96); border: 1px solid rgba(69,217,197,0.4); color: var(--cream);
+    padding: 13px 22px; border-radius: 12px; font-size: 14px; font-weight: 600;
+    box-shadow: 0 14px 40px rgba(0,0,0,0.5); opacity: 0; pointer-events: none; transition: opacity .25s; }
+  .toast.on { opacity: 1; }
+
+  @media (max-width: 520px) {
+    .grid { grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 9px; }
+    .lb-cap { max-width: 80vw; }
+  }
+</style>
+</head>
+<body>
+<div class="dotgrid"></div>
+<div class="ring ring1"></div>
+<div class="ring ring2"></div>
+
+<div class="wrap">
+
+  <div class="head">
+    <span class="badge"><span class="dot"></span>OxygenBar360</span>
+    <p class="eyebrow">EVENT PHOTO LIBRARY</p>
+    <h1 id="title">Your event, <span class="accent">captured</span></h1>
+    <p class="sub" id="sub">Every shot your guests took at the oxygen bar — yours to keep, download, and share with the whole team.</p>
+    <div class="stat" id="stat"></div>
+
+    <div class="toolbar" id="toolbar" style="display:none">
+      <button class="btn btn-primary" id="dlAll">⬇&nbsp; Download all</button>
+      <button class="btn btn-ghost" id="share">↗&nbsp; Share gallery</button>
+    </div>
+  </div>
+
+  <div id="content">
+    <div class="state" id="loading"><div class="badge"><span class="dot"></span>Loading your gallery…</div></div>
+  </div>
+
+  <footer id="footer" style="display:none">
+    <p class="ff">Loved these? Your <b>$200 Fresh Forward</b> gift card is waiting for the next one — book another oxygen-bar reset for your team whenever it takes shape.</p>
+    <a class="btn btn-ghost" id="bookBtn" href="#">Start planning the next event</a>
+    <div class="tagline">Relax. Recharge. Refocus.</div>
+    <div class="site">oxygenbar360.com</div>
+    <div class="hri">HUMAN RESET INFRASTRUCTURE</div>
+  </footer>
+
+</div>
+
+<!-- lightbox -->
+<div class="lb" id="lb">
+  <button class="lb-close" id="lbClose" aria-label="Close">✕</button>
+  <button class="lb-nav prev" id="lbPrev" aria-label="Previous">‹</button>
+  <img id="lbImg" alt="">
+  <button class="lb-nav next" id="lbNext" aria-label="Next">›</button>
+  <div class="lb-bar">
+    <span class="lb-cap" id="lbCap"></span>
+    <button class="btn btn-primary" id="lbDl">⬇&nbsp; Download</button>
+    <button class="btn btn-ghost" id="lbShare">↗&nbsp; Share</button>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* ====================== CONFIG ====================== */
+var SUPA_URL = "https://vylxwrvxmozxvbctrhll.supabase.co";
+var SUPA_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZ5bHh3cnZ4bW96eHZiY3RyaGxsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA1MzA0NDYsImV4cCI6MjA5NjEwNjQ0Nn0.DUwRPoMoKhnOQpnv8p52fHlIBxodTyWUsWtrJf5_3xc";
+var TABLE    = "booth_photos";
+var BOOK_URL = "https://oxygenbar360.com";   // rebooking / "plan the next event"
+var JSZIP_CDN = "https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js";
+/* =================================================== */
+
+var REST = SUPA_URL + "/rest/v1/" + TABLE;
+var HEADERS = { apikey: SUPA_KEY, Authorization: "Bearer " + SUPA_KEY };
+var imgCache = {};      // id -> dataURL
+var photos = [];        // manifest: {id, caption, created_at, src}
+var EVENT = "";
+
+function $(id){ return document.getElementById(id); }
+function enc(v){ return encodeURIComponent(v); }
+function esc(s){ return (s||"").replace(/[&<>"']/g, function(c){ return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]; }); }
+
+function toast(msg, ms){
+  var t = $("toast"); t.textContent = msg; t.classList.add("on");
+  clearTimeout(toast._t); if(ms !== 0) toast._t = setTimeout(function(){ t.classList.remove("on"); }, ms || 2600);
+}
+
+function fmtRange(rows){
+  if(!rows.length) return "";
+  var ds = rows.map(function(r){ return new Date(r.created_at); }).sort(function(a,b){ return a-b; });
+  var opt = { month:"long", day:"numeric", year:"numeric" };
+  var a = ds[0].toLocaleDateString("en-US", opt);
+  var b = ds[ds.length-1].toLocaleDateString("en-US", opt);
+  if(a === b) return a;
+  // same month/year -> "June 6–7, 2026"
+  var sa = ds[0], sb = ds[ds.length-1];
+  if(sa.getMonth()===sb.getMonth() && sa.getFullYear()===sb.getFullYear()){
+    return sa.toLocaleDateString("en-US",{month:"long",day:"numeric"}) + "–" + sb.getDate() + ", " + sb.getFullYear();
+  }
+  return a + " – " + b;
+}
+
+/* ---------- data ---------- */
+function loadManifest(event){
+  var url = REST + "?event_name=eq." + enc(event) + "&select=id,caption,created_at,src&order=created_at.asc&limit=2000";
+  return fetch(url, { headers: HEADERS }).then(function(r){
+    if(!r.ok) throw new Error("HTTP " + r.status);
+    return r.json();
+  });
+}
+function fetchImage(id){
+  if(imgCache[id]) return Promise.resolve(imgCache[id]);
+  var url = REST + "?id=eq." + enc(id) + "&select=image_url&limit=1";
+  return fetch(url, { headers: HEADERS }).then(function(r){ return r.json(); }).then(function(rows){
+    var d = rows && rows[0] && rows[0].image_url;
+    if(d) imgCache[id] = d;
+    return d;
+  });
+}
+function loadEventList(){
+  var url = REST + "?select=event_name,created_at&order=created_at.desc&limit=2000";
+  return fetch(url, { headers: HEADERS }).then(function(r){ return r.json(); });
+}
+
+/* ---------- render ---------- */
+var io = ("IntersectionObserver" in window) ? new IntersectionObserver(function(entries){
+  entries.forEach(function(e){
+    if(!e.isIntersecting) return;
+    var tile = e.target; io.unobserve(tile);
+    var id = tile.getAttribute("data-id");
+    fetchImage(id).then(function(d){
+      if(!d) return;
+      var img = tile.querySelector("img");
+      img.onload = function(){ tile.classList.add("loaded"); };
+      img.src = d;
+    }).catch(function(){});
+  });
+}, { rootMargin: "300px 0px" }) : null;
+
+function renderGrid(){
+  var html = '<div class="grid" id="grid">';
+  photos.forEach(function(p, i){
+    html += '<figure class="tile" data-id="'+p.id+'" data-idx="'+i+'">'
+          +   '<div class="ph"></div>'
+          +   '<img alt="'+esc(p.caption)+'" decoding="async">'
+          +   '<span class="zoom"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#F3EBDB" stroke-width="2.4"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.5" y2="16.5"/></svg></span>'
+          +   '<figcaption>'+esc(p.caption)+'</figcaption>'
+          + '</figure>';
+  });
+  html += '</div>';
+  $("content").innerHTML = html;
+
+  var tiles = document.querySelectorAll(".tile");
+  tiles.forEach(function(t){
+    if(io) io.observe(t); else { // no IO -> load immediately
+      var id = t.getAttribute("data-id");
+      fetchImage(id).then(function(d){ if(d){ var im=t.querySelector("img"); im.onload=function(){t.classList.add("loaded");}; im.src=d; } });
+    }
+    t.addEventListener("click", function(){ openLB(parseInt(t.getAttribute("data-idx"),10)); });
+  });
+}
+
+function showEmpty(){
+  $("content").innerHTML = '<div class="state"><h2>No photos for this event yet</h2>'
+    + '<p>Once your guests start snapping at the oxygen bar, every shot lands here automatically.</p></div>';
+}
+
+function showPicker(){
+  loadEventList().then(function(rows){
+    var seen = {}, list = [];
+    rows.forEach(function(r){ if(r.event_name && !seen[r.event_name]){ seen[r.event_name]=true; list.push(r); } });
+    if(!list.length){ $("content").innerHTML = '<div class="state"><h2>No events yet</h2><p>Add <code>?event=Your%20Event</code> to the link to open a gallery.</p></div>'; return; }
+    var html = '<div class="state"><h2>Pick an event</h2><p>This link opens any event’s gallery. Add <code>?event=Name</code> to go straight there.</p><div class="chips">';
+    list.forEach(function(r){
+      var d = new Date(r.created_at).toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"});
+      html += '<a class="chip" href="?event='+enc(r.event_name)+'">'+esc(r.event_name)+'<small>'+d+'</small></a>';
+    });
+    html += '</div></div>';
+    $("content").innerHTML = html;
+  }).catch(function(){ $("content").innerHTML = '<div class="state"><h2>Couldn’t reach the gallery</h2><p>Check the connection and reload.</p></div>'; });
+}
+
+/* ---------- lightbox ---------- */
+var lbIdx = -1;
+function openLB(i){
+  lbIdx = i; var p = photos[i];
+  $("lb").classList.add("on");
+  $("lbCap").textContent = p.caption || "";
+  $("lbImg").removeAttribute("src");
+  $("lbPrev").disabled = (i<=0); $("lbNext").disabled = (i>=photos.length-1);
+  fetchImage(p.id).then(function(d){ if(d && lbIdx===i) $("lbImg").src = d; });
+}
+function closeLB(){ $("lb").classList.remove("on"); lbIdx = -1; }
+function navLB(step){ var n = lbIdx+step; if(n>=0 && n<photos.length) openLB(n); }
+
+/* ---------- downloads ---------- */
+function dataURLtoBlob(d){
+  var parts = d.split(","), mime = (parts[0].match(/:(.*?);/)||[])[1] || "image/png";
+  var bin = atob(parts[1]), n = bin.length, arr = new Uint8Array(n);
+  for(var i=0;i<n;i++) arr[i] = bin.charCodeAt(i);
+  return new Blob([arr], { type: mime });
+}
+function saveBlob(blob, name){
+  var url = URL.createObjectURL(blob), a = document.createElement("a");
+  a.href = url; a.download = name; document.body.appendChild(a); a.click();
+  setTimeout(function(){ URL.revokeObjectURL(url); a.remove(); }, 1500);
+}
+function safeName(){ return (EVENT||"OxygenBar360").replace(/[^a-z0-9]+/gi,"-").replace(/^-|-$/g,""); }
+
+function downloadOne(i){
+  var p = photos[i];
+  toast("Preparing photo…", 0);
+  fetchImage(p.id).then(function(d){
+    if(!d){ toast("Photo unavailable"); return; }
+    saveBlob(dataURLtoBlob(d), safeName()+"-"+String(i+1).padStart(2,"0")+".png");
+    toast("Saved");
+  });
+}
+
+function loadJSZip(){
+  return new Promise(function(res, rej){
+    if(window.JSZip) return res(window.JSZip);
+    var s = document.createElement("script"); s.src = JSZIP_CDN;
+    s.onload = function(){ res(window.JSZip); }; s.onerror = function(){ rej(new Error("zip lib failed")); };
+    document.head.appendChild(s);
+  });
+}
+function downloadAll(){
+  var n = photos.length;
+  var approxMB = Math.round(n * 3);
+  if(!confirm("Download all " + n + " photos as a ZIP?\n\nApprox " + approxMB + " MB — best on Wi‑Fi. On a phone, large galleries can be slow.")) return;
+  $("dlAll").disabled = true;
+  loadJSZip().then(function(JSZip){
+    var zip = new JSZip(), folder = zip.folder(safeName());
+    var done = 0;
+    function step(i){
+      if(i >= n){
+        toast("Zipping " + n + " photos…", 0);
+        return zip.generateAsync({ type:"blob" }, function(meta){
+          toast("Zipping… " + Math.round(meta.percent) + "%", 0);
+        }).then(function(blob){
+          saveBlob(blob, safeName() + "-OxygenBar360-photos.zip");
+          toast("Downloaded " + n + " photos"); $("dlAll").disabled = false;
+        });
+      }
+      toast("Gathering " + (i+1) + " of " + n + "…", 0);
+      return fetchImage(photos[i].id).then(function(d){
+        if(d){ var b64 = d.split(",")[1]; folder.file(String(i+1).padStart(2,"0") + ".png", b64, { base64:true }); }
+        return step(i+1);
+      });
+    }
+    step(0);
+  }).catch(function(){ toast("Couldn’t load the zip tool"); $("dlAll").disabled = false; });
+}
+
+/* ---------- share ---------- */
+function shareGallery(){
+  var data = { title: "OxygenBar360 — " + (EVENT||"Event") + " photos", text: "Photos from our OxygenBar360 oxygen-bar activation:", url: location.href };
+  if(navigator.share){ navigator.share(data).catch(function(){}); }
+  else { copy(location.href); }
+}
+function shareOne(i){
+  var p = photos[i];
+  fetchImage(p.id).then(function(d){
+    if(navigator.share && navigator.canShare){
+      try{
+        var file = new File([dataURLtoBlob(d)], safeName()+"-"+(i+1)+".png", { type:"image/png" });
+        if(navigator.canShare({ files:[file] })){ navigator.share({ files:[file], title:"OxygenBar360" }).catch(function(){}); return; }
+      }catch(e){}
+    }
+    downloadOne(i);
+  });
+}
+function copy(text){
+  if(navigator.clipboard){ navigator.clipboard.writeText(text).then(function(){ toast("Link copied"); }, function(){ toast(text); }); }
+  else { toast(text); }
+}
+
+/* ---------- init ---------- */
+function init(){
+  $("bookBtn").href = BOOK_URL;
+  EVENT = new URLSearchParams(location.search).get("event") || "";
+
+  // wire controls
+  $("dlAll").addEventListener("click", downloadAll);
+  $("share").addEventListener("click", shareGallery);
+  $("lbClose").addEventListener("click", closeLB);
+  $("lbPrev").addEventListener("click", function(){ navLB(-1); });
+  $("lbNext").addEventListener("click", function(){ navLB(1); });
+  $("lbDl").addEventListener("click", function(){ if(lbIdx>=0) downloadOne(lbIdx); });
+  $("lbShare").addEventListener("click", function(){ if(lbIdx>=0) shareOne(lbIdx); });
+  $("lb").addEventListener("click", function(e){ if(e.target === $("lb")) closeLB(); });
+  document.addEventListener("keydown", function(e){
+    if(!$("lb").classList.contains("on")) return;
+    if(e.key==="Escape") closeLB(); else if(e.key==="ArrowLeft") navLB(-1); else if(e.key==="ArrowRight") navLB(1);
+  });
+
+  if(!EVENT){ $("footer").style.display="none"; showPicker(); return; }
+
+  document.title = EVENT + " — Photo Library — OxygenBar360";
+  loadManifest(EVENT).then(function(rows){
+    photos = rows || [];
+    $("title").innerHTML = 'The gallery from <span class="accent">' + esc(EVENT) + '</span>';
+    if(!photos.length){ showEmpty(); $("footer").style.display="block"; return; }
+    $("stat").textContent = photos.length + " moments captured · " + fmtRange(photos);
+    $("toolbar").style.display = "flex";
+    $("footer").style.display = "block";
+    renderGrid();
+  }).catch(function(){
+    $("content").innerHTML = '<div class="state"><h2>Couldn’t load this gallery</h2><p>Double‑check the event link, or reload in a moment.</p></div>';
+    $("footer").style.display="block";
+  });
+}
+document.addEventListener("DOMContentLoaded", init);
+</script>
+</body>
+</html>
