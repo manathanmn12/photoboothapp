@@ -95,9 +95,12 @@
   .tap-hint{position:relative;z-index:7;display:flex;align-items:center;justify-content:center;gap:9px;
     margin:0 auto 14px;padding:11px 20px;width:max-content;max-width:92%;border-radius:99px;
     background:rgba(125,240,208,.14);border:1px solid var(--stroke-2);
-    font-size:15.5px;font-weight:600;color:var(--mint);text-align:center;
-    box-shadow:0 6px 24px rgba(125,240,208,.22);animation:hintbob 2.6s ease-in-out infinite}
+    font-size:15.5px;font-weight:600;color:var(--mint);text-align:center;overflow:hidden;max-height:60px;
+    box-shadow:0 6px 24px rgba(125,240,208,.22);animation:hintbob 2.6s ease-in-out infinite;
+    transition:opacity .35s ease,max-height .4s ease,margin .35s ease,padding .35s ease,border-color .35s ease}
   .tap-hint .pt{font-size:19px;animation:hintpoint 1.5s ease-in-out infinite}
+  /* collapses away after the first emoji tap to free up space */
+  .tap-hint.gone{opacity:0;max-height:0;margin-top:0;margin-bottom:0;padding-top:0;padding-bottom:0;border-color:transparent;animation:none;pointer-events:none}
   @keyframes hintbob{0%,100%{transform:translateY(0)}50%{transform:translateY(-4px)}}
   @keyframes hintpoint{0%,100%{transform:translateY(0)}50%{transform:translateY(4px)}}
   @media (prefers-reduced-motion: reduce){.shimmer,.pop,.btn.pulse,.fcard,.tap-hint,.tap-hint .pt{animation:none}.pop{opacity:1}}
@@ -271,7 +274,7 @@
     <div class="uplift-band"><div class="uplift-pop" id="upliftPop"></div></div>
 
     <div class="welcome-hero">
-      <div class="tap-hint pop d0">Tap the floating emojis for a little lift <span class="pt">👆</span></div>
+      <div class="tap-hint" id="tapHint">Tap the floating emojis for a little lift <span class="pt">👆</span></div>
       <div class="eyebrow pop d0" id="evEyebrow">📸 Snap · Style · Share</div>
       <h1 class="pop d1 big-hero">Make your<br><em class="shimmer">moment</em><br>shareable.</h1>
       <p class="sub pop d2">Snap a pic, add stickers &amp; vibes, and post it in seconds ✦</p>
@@ -397,6 +400,7 @@
     if(n==="welcome"){
       const ws=document.querySelector("[data-screen='welcome']");
       if(ws) ws.querySelectorAll(".pop").forEach(el=>el.style.opacity="1");
+      const th=document.getElementById("tapHint"); if(th) th.classList.remove("gone");  // hint visible again on each fresh welcome visit
     }
     window.scrollTo(0,0);
   }
@@ -874,6 +878,8 @@
   $("#floatCards").addEventListener("click",e=>{
     const b=e.target.closest("[data-emoji]"); if(!b) return;
     const emoji=b.dataset.emoji;
+    // first tap: collapse the "tap the emojis" hint to free up space
+    const th=$("#tapHint"); if(th) th.classList.add("gone");
     sessionData.emoji_taps[emoji]=(sessionData.emoji_taps[emoji]||0)+1;
     updateSession({emoji_taps:sessionData.emoji_taps});
     logEventOnce("Experience Engaged","emoji");
