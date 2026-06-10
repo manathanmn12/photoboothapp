@@ -91,7 +91,16 @@
     color:#fff;text-shadow:0 2px 18px rgba(0,0,0,.5);opacity:0}
   .uplift-pop.show{animation:upfade 3s ease-out forwards}
   @keyframes upfade{0%{opacity:0;transform:translateY(8px)}15%{opacity:1;transform:none}80%{opacity:1;transform:none}100%{opacity:0;transform:translateY(-4px)}}
-  @media (prefers-reduced-motion: reduce){.shimmer,.pop,.btn.pulse,.fcard{animation:none}.pop{opacity:1}}
+  /* top hint pill — tells guests the floating emojis are tappable */
+  .tap-hint{position:relative;z-index:7;display:flex;align-items:center;justify-content:center;gap:9px;
+    margin:0 auto 14px;padding:11px 20px;width:max-content;max-width:92%;border-radius:99px;
+    background:rgba(125,240,208,.14);border:1px solid var(--stroke-2);
+    font-size:15.5px;font-weight:600;color:var(--mint);text-align:center;
+    box-shadow:0 6px 24px rgba(125,240,208,.22);animation:hintbob 2.6s ease-in-out infinite}
+  .tap-hint .pt{font-size:19px;animation:hintpoint 1.5s ease-in-out infinite}
+  @keyframes hintbob{0%,100%{transform:translateY(0)}50%{transform:translateY(-4px)}}
+  @keyframes hintpoint{0%,100%{transform:translateY(0)}50%{transform:translateY(4px)}}
+  @media (prefers-reduced-motion: reduce){.shimmer,.pop,.btn.pulse,.fcard,.tap-hint,.tap-hint .pt{animation:none}.pop{opacity:1}}
 
   /* ===== DESKTOP: use the wider screen so the style step fits without scrolling ===== */
   @media (min-width: 820px){
@@ -262,9 +271,10 @@
     <div class="uplift-band"><div class="uplift-pop" id="upliftPop"></div></div>
 
     <div class="welcome-hero">
+      <div class="tap-hint pop d0">Tap the floating emojis for a little lift <span class="pt">👆</span></div>
       <div class="eyebrow pop d0" id="evEyebrow">📸 Snap · Style · Share</div>
       <h1 class="pop d1 big-hero">Make your<br><em class="shimmer">moment</em><br>shareable.</h1>
-      <p class="sub pop d2">Snap a pic, add stickers &amp; vibes, and post it in seconds ✦<br><span style="color:var(--mint)">Tap the floating emojis for a little lift 💚</span></p>
+      <p class="sub pop d2">Snap a pic, add stickers &amp; vibes, and post it in seconds ✦</p>
     </div>
     <div class="spacer"></div>
 
@@ -369,6 +379,7 @@
     </div>
     <p class="ro-cap">Your caption is already copied — just paste it ✦</p>
     <button class="btn ro-again" id="roAgain">Make another ✦</button>
+    <a class="ro-gallery" id="galleryLink" href="library.html" style="display:inline-block;margin-top:14px;color:#45D9C5;font-size:13px;font-weight:600;text-decoration:none;opacity:.9">📷 See all event photos →</a>
   </div>
 </div>
 
@@ -737,6 +748,9 @@
 
   // overlay close
   $("#roClose").addEventListener("click",()=>$("#resultOverlay").classList.remove("on"));
+
+  // event photo library link → carries the current event into the gallery
+  (function(){ const g=$("#galleryLink"); if(g) g.addEventListener("click",e=>{ e.preventDefault(); const ev=(typeof EVENT!=="undefined"&&EVENT)?("?event="+encodeURIComponent(EVENT)):""; location.href="library.html"+ev; }); })();
 
   function resetCreation(){
     photos=[]; objs.forEach(o=>o.el.remove()); objs=[]; selObj=null;
