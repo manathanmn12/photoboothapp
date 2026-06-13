@@ -33,7 +33,7 @@
 </style>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,500;0,9..144,600;1,9..144,500&family=Outfit:wght@300;400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,500;0,600;1,500&family=Lato:wght@400;600;700&display=swap" rel="stylesheet">
 <style>
   :root { --bg-top:#0A1B1B; --bg-bot:#112E2A; --cyan:#45D9C5; --cream:#F3EBDB; --panel:rgba(19,51,47,0.55); }
   * { box-sizing: border-box; }
@@ -142,73 +142,6 @@
     .grid { grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 9px; }
     .lb-cap { max-width: 80vw; }
   }
-</style>
-<style id="corpLib">
-/* ===================================================================
-   CORPORATE GALLERY REDESIGN · override layer (matches report system)
-   Navy canvas · single mint accent · Fraunces/Outfit/JetBrains Mono
-   Tufte data-ink restraint · hairline rules · mono micro-labels
-   =================================================================== */
-:root{
-  --bg:#06141b;--bg2:#08202e;--paper:#071a24;--ink:#eaf6f4;--ink-soft:#bcdcd8;--ink-faint:#7fa39f;
-  --mint:#7df0d0;--aqua:#46c7e8;--line:rgba(125,240,208,.20);--hair:rgba(234,246,244,.10);--mono:'JetBrains Mono',monospace;
-}
-body{
-  background:radial-gradient(1200px 760px at 50% -12%,rgba(22,98,127,.24),transparent 60%),
-             linear-gradient(180deg,#08202e 0%,#06141b 100%)!important;
-  background-attachment:fixed;font-family:'Outfit',Arial,sans-serif;color:var(--ink);-webkit-font-smoothing:antialiased;
-}
-.dotgrid{background-image:radial-gradient(rgba(125,240,208,.06) 1px,transparent 1px)}
-.ring{border-color:rgba(125,240,208,.08)}
-.wrap{max-width:1040px;padding:54px 22px 80px}
-
-/* ── MASTHEAD ── */
-.head{text-align:center}
-.badge{background:var(--paper);border:1px solid var(--line);font-family:'Outfit';font-weight:600;font-size:12.5px;letter-spacing:.01em;border-radius:6px;padding:8px 15px}
-.badge .dot{background:var(--mint);box-shadow:0 0 10px var(--mint)}
-.eyebrow{font-family:var(--mono);font-size:10.5px;letter-spacing:.34em;color:var(--ink-faint);margin:32px 0 14px}
-h1{font-family:'Fraunces',Georgia,serif;font-weight:600;color:var(--ink);letter-spacing:-.012em;font-size:clamp(32px,5.6vw,46px)}
-h1 .accent{font-style:italic;color:var(--mint)}
-.sub{font-family:'Outfit';color:var(--ink-soft);font-size:15px}
-.stat{font-family:var(--mono);font-size:11px;font-weight:500;letter-spacing:.2em;color:var(--ink-faint);text-transform:uppercase;
-  margin-top:20px;padding-top:18px;border-top:1px solid var(--hair);display:inline-block}
-
-/* ── TOOLBAR / BUTTONS (corporate, less pill) ── */
-.btn{border-radius:9px;font-family:'Outfit';font-weight:700;letter-spacing:.01em;padding:12px 22px;font-size:13.5px}
-.btn-primary{background:var(--mint);color:#04221b;box-shadow:0 8px 24px rgba(125,240,208,.20)}
-.btn-ghost{background:transparent;border:1px solid var(--line);color:var(--ink)}
-.btn-ghost:hover{border-color:var(--mint)}
-
-/* ── GRID / TILES ── */
-.grid{margin-top:34px;gap:10px}
-.tile{background:var(--paper);border:1px solid var(--hair);border-radius:8px}
-.tile .ph{background:linear-gradient(100deg,rgba(234,246,244,.03) 30%,rgba(125,240,208,.10) 50%,rgba(234,246,244,.03) 70%);background-size:220% 100%}
-.tile figcaption{font-family:'Outfit';font-size:11.5px;background:linear-gradient(transparent,rgba(4,12,16,.86))}
-.tile .zoom{background:rgba(4,12,16,.6);border:1px solid var(--hair)}
-
-/* ── STATES / PICKER ── */
-.state{color:var(--ink-soft)}
-.state h2{font-family:'Fraunces',serif;color:var(--ink);font-weight:600}
-.chip{background:var(--paper);border:1px solid var(--line);color:var(--ink);border-radius:8px;font-weight:600}
-.chip:hover{border-color:var(--mint)}
-.chip small{font-family:var(--mono);color:var(--ink-faint);letter-spacing:.06em}
-
-/* ── FOOTER ── */
-footer{border-top:1px solid var(--hair)}
-.ff{font-family:'Outfit';color:var(--ink-soft)}
-.ff b{color:var(--mint)}
-footer .tagline{font-family:'Fraunces',serif;font-style:italic;color:var(--mint)}
-footer .site{font-family:var(--mono);font-size:12px;letter-spacing:.06em;color:var(--ink-soft)}
-footer .hri{font-family:var(--mono);font-size:9px;letter-spacing:.32em;color:var(--ink-faint)}
-
-/* ── LIGHTBOX ── */
-.lb{background:rgba(4,12,16,.95)}
-.lb img{border-radius:10px}
-.lb-cap{font-family:'Fraunces',serif;font-style:italic;color:var(--ink-soft)}
-.lb-close,.lb-nav{background:var(--paper);border:1px solid var(--line);color:var(--ink)}
-
-/* ── TOAST ── */
-.toast{background:var(--paper);border:1px solid var(--mint);color:var(--ink);border-radius:10px}
 </style>
 </head>
 <body>
@@ -322,19 +255,44 @@ function loadEventList(){
 }
 
 /* ---------- render ---------- */
+/* Concurrency-limited image loader (Phase-1 fix 2026-06-12).
+   Each booth photo is a full-res base64 PNG (~3 MB); firing every
+   visible tile at once saturates the connection + memory and the
+   images stall. Cap how many load at once so they stream in steadily.
+   Durable fix = Cloudinary thumbnails (see NOTES). */
+var MAX_CONCURRENT = 2;
+var loadQueue = [];
+var inFlight = 0;
+var queued = {};
+function pumpQueue(){
+  while(inFlight < MAX_CONCURRENT && loadQueue.length){ loadTile(loadQueue.shift()); }
+}
+function enqueueTile(tile){
+  var id = tile.getAttribute("data-id");
+  if(queued[id]) return;
+  queued[id] = true;
+  loadQueue.push(tile);
+  pumpQueue();
+}
+function loadTile(tile){
+  inFlight++;
+  var id = tile.getAttribute("data-id");
+  fetchImage(id).then(function(d){
+    if(!d){ inFlight--; pumpQueue(); return; }
+    var img = tile.querySelector("img");
+    img.onload = function(){ tile.classList.add("loaded"); inFlight--; pumpQueue(); };
+    img.onerror = function(){ inFlight--; pumpQueue(); };
+    img.src = d;
+  }).catch(function(){ inFlight--; pumpQueue(); });
+}
+
 var io = ("IntersectionObserver" in window) ? new IntersectionObserver(function(entries){
   entries.forEach(function(e){
     if(!e.isIntersecting) return;
     var tile = e.target; io.unobserve(tile);
-    var id = tile.getAttribute("data-id");
-    fetchImage(id).then(function(d){
-      if(!d) return;
-      var img = tile.querySelector("img");
-      img.onload = function(){ tile.classList.add("loaded"); };
-      img.src = d;
-    }).catch(function(){});
+    enqueueTile(tile);
   });
-}, { rootMargin: "300px 0px" }) : null;
+}, { rootMargin: "400px 0px" }) : null;
 
 function renderGrid(){
   var html = '<div class="grid" id="grid">';
@@ -351,10 +309,7 @@ function renderGrid(){
 
   var tiles = document.querySelectorAll(".tile");
   tiles.forEach(function(t){
-    if(io) io.observe(t); else { // no IO -> load immediately
-      var id = t.getAttribute("data-id");
-      fetchImage(id).then(function(d){ if(d){ var im=t.querySelector("img"); im.onload=function(){t.classList.add("loaded");}; im.src=d; } });
-    }
+    if(io) io.observe(t); else { enqueueTile(t); } // no IO -> queued load
     t.addEventListener("click", function(){ openLB(parseInt(t.getAttribute("data-idx"),10)); });
   });
 }
