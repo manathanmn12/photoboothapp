@@ -428,10 +428,16 @@
       if(coBranded) return;
       if(!CLIENT && !BRAND) return;            // nothing set → normal booth
       coBranded=true;
-      const ro=document.getElementById("resultOverlay"); if(!ro) return;
       const accent = BRAND ? ("#"+BRAND) : "#7df0d0";
       const st=document.createElement("style");
       st.textContent=
+        // ---- full app theme: recolor every screen to the client's brand ----
+        "body.ob-cobrand{--mint:"+accent+";--aqua:"+accent+";}"+
+        "body.ob-cobrand .btn{color:#fff;}"+
+        "body.ob-cobrand .slot .plus{color:"+accent+";}"+
+        "body.ob-cobrand .layout:hover,body.ob-cobrand .layout.sel{border-color:"+accent+";}"+
+        "body.ob-cobrand .bg{background:radial-gradient(1200px 800px at 18% 12%,"+accent+"3d,transparent 60%),radial-gradient(1000px 700px at 85% 18%,"+accent+"30,transparent 60%),radial-gradient(1100px 900px at 50% 95%,"+accent+"3d,transparent 60%),linear-gradient(180deg,#0a1f2b,#06141b);}"+
+        // ---- share/result overlay accents + lockup ----
         "#resultOverlay.cobrand .ro-title span{color:"+accent+"}"+
         "#resultOverlay.cobrand .ro-step b{color:"+accent+"}"+
         "#resultOverlay.cobrand .ro-posbadge{background:"+accent+";color:#fff}"+
@@ -443,19 +449,26 @@
         "#resultOverlay.cobrand .ro-stripe{height:4px;border-radius:4px;width:130px;margin:0 auto 16px;background:"+accent+"}"+
         "#resultOverlay.cobrand .ro-tag{margin-top:14px;font-weight:700;font-size:15px;color:"+accent+";text-align:center}";
       document.head.appendChild(st);
-      const inner=ro.querySelector(".ro-inner");
-      if(inner){
-        const lk=document.createElement("div"); lk.className="ro-cobrand";
-        lk.innerHTML='<span class="dot"></span><span style="color:var(--ink)">OxygenBar360</span><span class="x">✕</span>'+(CLIENT?'<span class="cl">'+CLIENT+'</span>':'');
-        inner.insertBefore(lk, inner.firstChild);
-        const stripe=document.createElement("div"); stripe.className="ro-stripe"; lk.parentNode.insertBefore(stripe, lk.nextSibling);
-        if(CLIENT_HASH || EVENT_HANDLE){
-          const tag=document.createElement("div"); tag.className="ro-tag";
-          tag.textContent="Tag "+(EVENT_HANDLE?EVENT_HANDLE+" ":"")+(CLIENT_HASH?"#"+CLIENT_HASH:"")+" & @oxygenbar360";
-          const cap=ro.querySelector(".ro-cap"); if(cap&&cap.parentNode){ cap.parentNode.insertBefore(tag, cap); } else { inner.appendChild(tag); }
+      document.body.classList.add("ob-cobrand");
+      // co-brand lockup on the welcome screen (first thing guests see)
+      const wb=document.querySelector("[data-screen='welcome'] .brand");
+      if(wb && CLIENT){ wb.innerHTML='<span class="dot"></span>OxygenBar360 <span style="color:var(--ink-faint);font-weight:400">✕</span> <span style="font-family:\'Outfit\',sans-serif;font-weight:700;color:'+accent+'">'+CLIENT+'</span>'; }
+      const ro=document.getElementById("resultOverlay");
+      if(ro){
+        const inner=ro.querySelector(".ro-inner");
+        if(inner){
+          const lk=document.createElement("div"); lk.className="ro-cobrand";
+          lk.innerHTML='<span class="dot"></span><span style="color:var(--ink)">OxygenBar360</span><span class="x">✕</span>'+(CLIENT?'<span class="cl">'+CLIENT+'</span>':'');
+          inner.insertBefore(lk, inner.firstChild);
+          const stripe=document.createElement("div"); stripe.className="ro-stripe"; lk.parentNode.insertBefore(stripe, lk.nextSibling);
+          if(CLIENT_HASH || EVENT_HANDLE){
+            const tag=document.createElement("div"); tag.className="ro-tag";
+            tag.textContent="Tag "+(EVENT_HANDLE?EVENT_HANDLE+" ":"")+(CLIENT_HASH?"#"+CLIENT_HASH:"")+" & @oxygenbar360";
+            const cap=ro.querySelector(".ro-cap"); if(cap&&cap.parentNode){ cap.parentNode.insertBefore(tag, cap); } else { inner.appendChild(tag); }
+          }
         }
+        ro.classList.add("cobrand");
       }
-      ro.classList.add("cobrand");
     }catch(e){}
   }
   applyCoBrand();   // applies now if URL params present; resolveActiveEvent() also calls it for dashboard-driven branding
