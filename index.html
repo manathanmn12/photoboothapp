@@ -410,12 +410,55 @@
   const q=new URLSearchParams(location.search);
   let EVENT=q.get("event")||"";   // may be filled from Supabase active-event if blank
   const EVENT_FROM_URL = !!q.get("event");
-  const EVENT_HANDLE=q.get("handle")||"";
+  let EVENT_HANDLE=q.get("handle")||"";
   const HANDLE="@oxygenbar360";
   // entry method: how the guest arrived — "qr", "nfc", or unknown.
   // QR codes link to ?src=qr, NFC chips link to ?src=nfc.
   const SRC=(q.get("src")||"unknown").toLowerCase();
   if(EVENT) $("#evEyebrow").textContent=EVENT;
+
+  // ----- optional CLIENT co-branding (Option B). All gated on params; default booth unchanged. -----
+  // URL: ?client=Google&brand=4285F4&hash=LifeAtGoogle&handle=@Google
+  let CLIENT = q.get("client")||"";
+  let BRAND = (q.get("brand")||"").replace(/^#/,"");
+  let CLIENT_HASH = (q.get("hash")||"").replace(/^#/,"");
+  let coBranded=false;
+  function applyCoBrand(){
+    try{
+      if(coBranded) return;
+      if(!CLIENT && !BRAND) return;            // nothing set → normal booth
+      coBranded=true;
+      const ro=document.getElementById("resultOverlay"); if(!ro) return;
+      const accent = BRAND ? ("#"+BRAND) : "#7df0d0";
+      const st=document.createElement("style");
+      st.textContent=
+        "#resultOverlay.cobrand .ro-title span{color:"+accent+"}"+
+        "#resultOverlay.cobrand .ro-step b{color:"+accent+"}"+
+        "#resultOverlay.cobrand .ro-posbadge{background:"+accent+";color:#fff}"+
+        "#resultOverlay.cobrand .ro-again{background:"+accent+";color:#fff}"+
+        "#resultOverlay.cobrand .ro-cobrand{display:flex;align-items:center;justify-content:center;gap:9px;flex-wrap:wrap;margin-bottom:10px;font-family:'Fraunces',serif;font-size:19px}"+
+        "#resultOverlay.cobrand .ro-cobrand .dot{width:9px;height:9px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#7df0d0,#46c7e8);box-shadow:0 0 12px #7df0d0}"+
+        "#resultOverlay.cobrand .ro-cobrand .cl{font-family:'Outfit',sans-serif;font-weight:700;color:"+accent+"}"+
+        "#resultOverlay.cobrand .ro-cobrand .x{color:var(--ink-faint);font-size:15px}"+
+        "#resultOverlay.cobrand .ro-stripe{height:4px;border-radius:4px;width:130px;margin:0 auto 16px;background:"+accent+"}"+
+        "#resultOverlay.cobrand .ro-tag{margin-top:14px;font-weight:700;font-size:15px;color:"+accent+";text-align:center}";
+      document.head.appendChild(st);
+      const inner=ro.querySelector(".ro-inner");
+      if(inner){
+        const lk=document.createElement("div"); lk.className="ro-cobrand";
+        lk.innerHTML='<span class="dot"></span><span style="color:var(--ink)">OxygenBar360</span><span class="x">✕</span>'+(CLIENT?'<span class="cl">'+CLIENT+'</span>':'');
+        inner.insertBefore(lk, inner.firstChild);
+        const stripe=document.createElement("div"); stripe.className="ro-stripe"; lk.parentNode.insertBefore(stripe, lk.nextSibling);
+        if(CLIENT_HASH || EVENT_HANDLE){
+          const tag=document.createElement("div"); tag.className="ro-tag";
+          tag.textContent="Tag "+(EVENT_HANDLE?EVENT_HANDLE+" ":"")+(CLIENT_HASH?"#"+CLIENT_HASH:"")+" & @oxygenbar360";
+          const cap=ro.querySelector(".ro-cap"); if(cap&&cap.parentNode){ cap.parentNode.insertBefore(tag, cap); } else { inner.appendChild(tag); }
+        }
+      }
+      ro.classList.add("cobrand");
+    }catch(e){}
+  }
+  applyCoBrand();   // applies now if URL params present; resolveActiveEvent() also calls it for dashboard-driven branding
 
   // ----- layouts -----
   const LAYOUTS=[
@@ -707,7 +750,7 @@
     selectObj(null);
     bake();
     const txtBits=objs.filter(o=>o.type==="text").map(o=>o.content).join(" ");
-    lastCap=(txtBits?txtBits+" ":"")+"at "+(EVENT||"OxygenBar360")+" "+(EVENT_HANDLE?EVENT_HANDLE+" with ":"")+HANDLE+" #oxygenbar360";
+    lastCap=(txtBits?txtBits+" ":"")+"at "+(EVENT||"OxygenBar360")+" "+(EVENT_HANDLE?EVENT_HANDLE+" with ":"")+HANDLE+" #oxygenbar360"+(CLIENT_HASH?" #"+CLIENT_HASH:"");
     try{ await navigator.clipboard.writeText(lastCap); }catch(e){}
     lastBlob=await new Promise((res,rej)=>$("#c").toBlob(b=>b?res(b):rej(new Error("render failed")),"image/png",0.92));
     return lastBlob;
@@ -992,15 +1035,24 @@
   // If the URL had no ?event=, resolve the dashboard's currently-active event first,
   // so a single permanent QR code always tags scans to the right event.
   async function resolveActiveEvent(){
-    if(EVENT_FROM_URL || !SUPA_READY) return;  // URL event wins; nothing to resolve
+    if(!SUPA_READY) return;
     try{
-      const r=await fetch(SUPA_URL+"/rest/v1/event_archive?summary->>active=eq.true&select=event_name,archived_at&order=archived_at.desc&limit=1",
+      const r=await fetch(SUPA_URL+"/rest/v1/event_archive?summary->>active=eq.true&select=event_name,archived_at,summary&order=archived_at.desc&limit=1",
         {headers:{"apikey":SUPA_KEY,"Authorization":"Bearer "+SUPA_KEY}});
       const rows=await r.json();
-      if(rows&&rows.length&&rows[0].event_name){
-        EVENT=rows[0].event_name;
-        sessionData.event_name=EVENT;
-        if($("#evEyebrow")) $("#evEyebrow").textContent=EVENT;
+      if(rows&&rows.length){
+        if(!EVENT_FROM_URL && rows[0].event_name){
+          EVENT=rows[0].event_name;
+          sessionData.event_name=EVENT;
+          if($("#evEyebrow")) $("#evEyebrow").textContent=EVENT;
+        }
+        // dashboard-driven per-client branding — lets the existing printed QR stay unchanged
+        const s=rows[0].summary||{};
+        if(!CLIENT && s.client) CLIENT=String(s.client);
+        if(!BRAND && s.brand) BRAND=String(s.brand).replace(/^#/,"");
+        if(!CLIENT_HASH && s.hash) CLIENT_HASH=String(s.hash).replace(/^#/,"");
+        if(!EVENT_HANDLE && s.handle) EVENT_HANDLE=String(s.handle);
+        applyCoBrand();
       }
     }catch(_){}
   }
