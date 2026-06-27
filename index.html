@@ -794,7 +794,7 @@
           photos_made:photosMade, made_another:sessionData.made_another||photosMade>=2});
         logEvent("Photo Shared");
         if(photosMade>=2) logEvent("Repeat Photo","photo #"+photosMade);
-        pushToWall($("#c").toDataURL("image/png"), lastCap);
+        pushToWall(compressForUpload(), lastCap);
         noteMyShare();
       }catch(_){}
       const shared=await tryNativeShare();
@@ -1086,21 +1086,40 @@
     return "🔥 Moment #"+n+" — you're Keeping it Alive!";
   }
 
-  function pushToWall(dataURL, caption){
-    if(!SUPA_READY) return;
-    // POST the photo, asking for the inserted row back so we can count position
-    fetch(SUPA_URL+"/rest/v1/booth_photos",{
+  // Shrink the full-res canvas to a compact JPEG before upload so the insert
+  // succeeds even on weak venue wifi (the full PNG was ~3-4MB and silently failed).
+  // The guest's SHARE still uses the full-res PNG (lastBlob) — only the DB copy is compressed.
+  function compressForUpload(){
+    try{
+      const src=$("#c"); const max=1280; let w=src.width,h=src.height;
+      if(Math.max(w,h)>max){ const s=max/Math.max(w,h); w=Math.round(w*s); h=Math.round(h*s); }
+      const t=document.createElement("canvas"); t.width=w; t.height=h;
+      t.getContext("2d").drawImage(src,0,0,w,h);
+      return t.toDataURL("image/jpeg",0.82);
+    }catch(e){ return $("#c").toDataURL("image/png"); }  // fallback to original
+  }
+
+  // POST with one automatic retry — flaky-wifi insurance
+  function postPhotoWithRetry(body, tries){
+    return fetch(SUPA_URL+"/rest/v1/booth_photos",{
       method:"POST",
       headers:{"apikey":SUPA_KEY,"Authorization":"Bearer "+SUPA_KEY,
         "Content-Type":"application/json","Prefer":"return=minimal"},
-      body:JSON.stringify({
+      body:JSON.stringify(body)
+    }).then(r=>{ if(!r.ok) throw new Error("HTTP "+r.status); return r; })
+      .catch(err=>{ if(tries>0){ return new Promise(res=>setTimeout(res,1500)).then(()=>postPhotoWithRetry(body,tries-1)); } throw err; });
+  }
+
+  function pushToWall(dataURL, caption){
+    if(!SUPA_READY) return;
+    // POST the photo (compressed) with retry, then read the count for the position badge
+    postPhotoWithRetry({
         event_name:EVENT||"OxygenBar360",
         caption:caption||"",
         image_url:dataURL,
         src:SRC,
         created_at:new Date().toISOString()
-      })
-    }).then(()=>{
+    },2).then(()=>{
       // fetch the count for this event to determine the guest's position
       return fetch(SUPA_URL+"/rest/v1/booth_photos?event_name=eq."+encodeURIComponent(EVENT||"OxygenBar360")+"&select=id",{
         headers:{"apikey":SUPA_KEY,"Authorization":"Bearer "+SUPA_KEY,"Prefer":"count=exact","Range":"0-0"}
