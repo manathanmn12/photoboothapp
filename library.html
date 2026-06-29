@@ -228,6 +228,14 @@ footer .hri{font-family:var(--mono);font-size:9px;letter-spacing:.32em;color:var
     <div class="toolbar" id="toolbar" style="display:none">
       <button class="btn btn-primary" id="dlAll">⬇&nbsp; Download all</button>
       <button class="btn btn-ghost" id="share">↗&nbsp; Share gallery</button>
+      <button class="btn btn-ghost" id="socialBtn">📐&nbsp; Social sizes</button>
+    </div>
+    <div id="socialPanel" style="display:none;margin:14px auto 0;max-width:560px;background:var(--paper,rgba(19,51,47,0.55));border:1px solid var(--hair,rgba(243,235,219,0.14));border-radius:14px;padding:16px;text-align:left">
+      <div style="font-weight:700;margin-bottom:4px;color:var(--ink,#F3EBDB)">Download your photos sized for social</div>
+      <div style="font-size:13px;color:var(--ink-soft,rgba(243,235,219,0.72));margin-bottom:12px">Tap the photos you want (or leave all), pick your formats, and download a ZIP ready to post — already cropped for each platform.</div>
+      <div id="socialFmts" style="display:flex;flex-wrap:wrap;gap:7px;margin-bottom:12px"></div>
+      <button class="btn btn-primary" id="socialGo">⬇&nbsp; Download for social (ZIP)</button>
+      <span id="socialMsg" style="display:block;font-size:12px;color:var(--ink-faint,rgba(243,235,219,0.55));margin-top:10px"></span>
     </div>
   </div>
 
@@ -390,7 +398,7 @@ function renderGrid(){
   var tiles = document.querySelectorAll(".tile");
   tiles.forEach(function(t){
     if(io) io.observe(t); else { if(t.getAttribute("data-thumb")) loadCloud(t); else enqueueTile(t); }
-    t.addEventListener("click", function(){ openLB(parseInt(t.getAttribute("data-idx"),10)); });
+    t.addEventListener("click", function(){ if(socialMode){ toggleSocialSel(t); return; } openLB(parseInt(t.getAttribute("data-idx"),10)); });
   });
 }
 
@@ -530,6 +538,72 @@ function copy(text){
 }
 
 /* ---------- init ---------- */
+/* ---------- client social export (resize their photos for each platform) ---------- */
+var socialMode=false, socialSel={};
+var SOC_FMTS=[
+  {key:"Story-Reels-TikTok",w:1080,h:1920,def:true},
+  {key:"Instagram-Portrait",w:1080,h:1350,def:true},
+  {key:"Square",w:1080,h:1080,def:true},
+  {key:"Facebook",w:1200,h:1500,def:false},
+  {key:"Pinterest",w:1000,h:1500,def:false}
+];
+var socOn={}; SOC_FMTS.forEach(function(f){socOn[f.key]=f.def;});
+function renderSocFmts(){
+  $("socialFmts").innerHTML=SOC_FMTS.map(function(f){
+    var on=socOn[f.key];
+    return '<button type="button" data-k="'+f.key+'" style="font-family:inherit;font-weight:600;font-size:12px;border-radius:8px;padding:8px 12px;cursor:pointer;border:1px solid '+(on?'#7df0d0':'rgba(243,235,219,0.3)')+';background:'+(on?'rgba(125,240,208,.16)':'transparent')+';color:'+(on?'#7df0d0':'rgba(243,235,219,0.8)')+'">'+f.key.replace(/-/g," / ")+'</button>';
+  }).join("");
+}
+function toggleSocialSel(tile){
+  var idx=tile.getAttribute("data-idx"); socialSel[idx]=!socialSel[idx];
+  tile.style.outline=socialSel[idx]?"3px solid #7df0d0":""; tile.style.outlineOffset="-3px";
+  var z=tile.querySelector(".soc-chk");
+  if(socialSel[idx]&&!z){ z=document.createElement("div"); z.className="soc-chk"; z.textContent="✓"; z.style.cssText="position:absolute;top:6px;left:6px;z-index:3;width:22px;height:22px;border-radius:50%;background:#7df0d0;color:#04221b;font-weight:700;display:flex;align-items:center;justify-content:center"; tile.appendChild(z); }
+  else if(!socialSel[idx]&&z){ z.remove(); }
+}
+function socSource(p){
+  return new Promise(function(res,rej){
+    var full=cldUrl(p.cloud_url,"c_limit,w_1280,q_auto,f_auto");
+    if(full && /^https?:/.test(full)){ var im=new Image(); im.crossOrigin="anonymous"; im.onload=function(){res(im);}; im.onerror=fb; im.src=full; } else fb();
+    function fb(){ fetchImage(p.id).then(function(d){ if(!d) return rej(new Error("no img")); var im2=new Image(); im2.onload=function(){res(im2);}; im2.onerror=function(){rej(new Error("img"));}; im2.src=d; }).catch(rej); }
+  });
+}
+function socCompose(im,f){
+  var c=document.createElement("canvas"); c.width=f.w; c.height=f.h; var ctx=c.getContext("2d");
+  ctx.fillStyle="#06141b"; ctx.fillRect(0,0,f.w,f.h);
+  var ir=im.width/im.height, tr=f.w/f.h, dw,dh;
+  if(ir>tr){dh=f.h;dw=f.h*ir;}else{dw=f.w;dh=f.w/ir;}
+  var dx=(f.w-dw)*0.5, dy=(f.h-dh)*0.42; dx=Math.min(0,Math.max(f.w-dw,dx)); dy=Math.min(0,Math.max(f.h-dh,dy));
+  ctx.drawImage(im,dx,dy,dw,dh);
+  var ms=Math.round(f.w*0.024), pad=Math.round(f.w*0.04), y=f.h-pad;
+  ctx.font="700 "+ms+"px 'Outfit',sans-serif"; ctx.textBaseline="alphabetic";
+  ctx.shadowColor="rgba(0,0,0,0.6)"; ctx.shadowBlur=8; ctx.shadowOffsetY=1;
+  ctx.fillStyle="#fff"; ctx.fillText("@oxygenbar",pad,y); var w=ctx.measureText("@oxygenbar").width;
+  ctx.fillStyle="#7df0d0"; ctx.fillText("360",pad+w,y); ctx.shadowColor="transparent";
+  return c.toDataURL("image/jpeg",0.9);
+}
+function socU8(d){ var b=atob(d.split(",")[1]),n=b.length,a=new Uint8Array(n); for(var i=0;i<n;i++)a[i]=b.charCodeAt(i); return a; }
+function buildSocial(){
+  var fmts=SOC_FMTS.filter(function(f){return socOn[f.key];});
+  if(!fmts.length){ $("socialMsg").textContent="Pick at least one format."; return; }
+  var idxs=Object.keys(socialSel).filter(function(k){return socialSel[k];}).map(Number);
+  var chosen = idxs.length ? idxs.map(function(i){return photos[i];}) : photos.slice();
+  if(!chosen.length) return;
+  $("socialGo").disabled=true;
+  loadJSZip().then(function(JSZip){
+    var zip=new JSZip(), root=zip.folder("OxygenBar360-"+safeName()+"-social"); var folders={}; fmts.forEach(function(f){folders[f.key]=root.folder(f.key);});
+    function step(i){
+      if(i>=chosen.length){
+        $("socialMsg").textContent="Zipping…";
+        return zip.generateAsync({type:"blob"}).then(function(blob){ saveBlob(blob,"OxygenBar360-"+safeName()+"-social.zip"); $("socialMsg").textContent="Done — "+chosen.length+" photo"+(chosen.length===1?"":"s")+" × "+fmts.length+" formats, organized by platform."; $("socialGo").disabled=false; });
+      }
+      $("socialMsg").textContent="Processing "+(i+1)+" of "+chosen.length+"…";
+      return socSource(chosen[i]).then(function(im){ fmts.forEach(function(f){ try{ folders[f.key].file(safeName()+"-"+String(i+1).padStart(2,"0")+".jpg", socU8(socCompose(im,f))); }catch(e){} }); return step(i+1); }).catch(function(){ return step(i+1); });
+    }
+    step(0);
+  }).catch(function(){ $("socialMsg").textContent="Couldn't load the zip tool."; $("socialGo").disabled=false; });
+}
+
 function init(){
   $("bookBtn").href = BOOK_URL;
   EVENT = new URLSearchParams(location.search).get("event") || "";
@@ -537,6 +611,11 @@ function init(){
   // wire controls
   $("dlAll").addEventListener("click", downloadAll);
   $("share").addEventListener("click", shareGallery);
+  (function(){
+    var b=$("socialBtn"); if(b) b.addEventListener("click", function(){ socialMode=!socialMode; $("socialPanel").style.display=socialMode?"block":"none"; b.style.opacity=socialMode?"0.7":""; if(socialMode){ renderSocFmts(); $("socialMsg").textContent="Tap photos to choose, or leave all selected."; } });
+    var sf=$("socialFmts"); if(sf) sf.addEventListener("click", function(e){ var x=e.target.closest("button[data-k]"); if(!x)return; socOn[x.dataset.k]=!socOn[x.dataset.k]; renderSocFmts(); });
+    var sg=$("socialGo"); if(sg) sg.addEventListener("click", buildSocial);
+  })();
   $("lbClose").addEventListener("click", closeLB);
   $("lbPrev").addEventListener("click", function(){ navLB(-1); });
   $("lbNext").addEventListener("click", function(){ navLB(1); });
