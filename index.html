@@ -283,7 +283,9 @@
 
     <div class="foot pop d3">
       <button class="btn pulse" id="startBtn" data-go="layout">Start the fun ✦</button>
-      <p class="muted">Takes 20 seconds · your photos never leave your phone</p>
+      <button class="btn ghost" id="videoBtn" style="margin-top:10px">🎥 Record a video</button>
+      <input type="file" id="videoInput" accept="video/*" capture="environment" style="display:none">
+      <p class="muted">Takes 20 seconds · snap photos or record a short clip ✦</p>
     </div>
   </section>
 
@@ -1136,6 +1138,62 @@
       }
     }).catch(()=>{});  // silent — never blocks the guest UX
   }
+
+  // ===== VIDEO CAPTURE (native phone camera → Supabase Storage, same event gallery) =====
+  (function(){
+    var vBtn=$("#videoBtn"), vIn=$("#videoInput");
+    if(!vBtn||!vIn) return;
+    function slugEvent(){ return (EVENT||"OxygenBar360").replace(/[^a-z0-9]+/gi,"-").replace(/^-|-$/g,"").slice(0,50)||"event"; }
+    function extOf(name,type){ var m=(name||"").match(/\.(\w+)$/); if(m) return m[1].toLowerCase(); if(/quicktime/.test(type||""))return"mov"; if(/webm/.test(type||""))return"webm"; return"mp4"; }
+    function grabPoster(file){
+      return new Promise(function(res){
+        try{
+          var v=document.createElement("video"); v.muted=true; v.setAttribute("playsinline",""); v.preload="metadata";
+          var url=URL.createObjectURL(file); var done=false;
+          function fail(){ if(!done){ done=true; try{URL.revokeObjectURL(url);}catch(e){} res(null); } }
+          v.onloadeddata=function(){ try{ v.currentTime=Math.min(0.4,(v.duration||1)/3); }catch(e){ fail(); } };
+          v.onseeked=function(){ if(done)return; try{
+              var w=v.videoWidth,h=v.videoHeight,max=720,pw=w,ph=h;
+              if(!w||!h){ fail(); return; }
+              if(Math.max(w,h)>max){ var s=max/Math.max(w,h); pw=Math.round(w*s); ph=Math.round(h*s); }
+              var c=document.createElement("canvas"); c.width=pw; c.height=ph; c.getContext("2d").drawImage(v,0,0,pw,ph);
+              c.toBlob(function(b){ done=true; try{URL.revokeObjectURL(url);}catch(e){} res({blob:b,dur:Math.round(v.duration||0)}); },"image/jpeg",0.82);
+            }catch(e){ fail(); } };
+          v.onerror=fail; setTimeout(fail,6000); v.src=url; v.load();
+        }catch(e){ res(null); }
+      });
+    }
+    function uploadStorage(path,blob,ctype){
+      return fetch(SUPA_URL+"/storage/v1/object/booth-media/"+path,{ method:"POST",
+        headers:{ apikey:SUPA_KEY, Authorization:"Bearer "+SUPA_KEY, "Content-Type":ctype, "x-upsert":"true" }, body:blob })
+        .then(function(r){ if(!r.ok) throw new Error("storage "+r.status); return SUPA_URL+"/storage/v1/object/public/booth-media/"+path; });
+    }
+    function insertRow(row){
+      return fetch(SUPA_URL+"/rest/v1/booth_photos",{ method:"POST",
+        headers:{ apikey:SUPA_KEY, Authorization:"Bearer "+SUPA_KEY, "Content-Type":"application/json", Prefer:"return=minimal" },
+        body:JSON.stringify(row) }).then(function(r){ if(!r.ok) throw new Error("db "+r.status); });
+    }
+    vBtn.addEventListener("click", function(){ vIn.click(); });
+    vIn.addEventListener("change", async function(e){
+      var file=e.target.files&&e.target.files[0]; vIn.value=""; if(!file) return;
+      if(file.size>100*1024*1024){ toast("That clip's too big — keep it to ~15 seconds"); return; }
+      var orig=vBtn.textContent; vBtn.disabled=true; vBtn.textContent="Uploading…"; toast("Uploading your video… ✦",0);
+      try{
+        var id="v_"+Date.now()+"_"+Math.random().toString(36).slice(2,6);
+        var base=slugEvent()+"/"+id;
+        var poster=await grabPoster(file);
+        var posterUrl=null, dur=(poster&&poster.dur)||0;
+        if(poster&&poster.blob){ try{ posterUrl=await uploadStorage(base+".jpg", poster.blob, "image/jpeg"); }catch(_){} }
+        var vidUrl=await uploadStorage(base+"."+extOf(file.name,file.type), file, file.type||"video/mp4");
+        await insertRow({ event_name:EVENT||"OxygenBar360", type:"video", src:(typeof SRC!=="undefined"?SRC:"qr"),
+          full_url:vidUrl, poster_url:posterUrl, cloud_url:posterUrl, duration_sec:dur, caption:"", created_at:new Date().toISOString() });
+        try{ logEvent("Video Shared"); }catch(_){}
+        try{ if(navigator.canShare && navigator.canShare({files:[file]})){ await navigator.share({ files:[file], text:(EVENT?("at "+EVENT+" "):"")+"@oxygenbar360 #oxygenbar360" }); } }catch(_){}
+        toast("🎥 Your video is in the event gallery ✦");
+      }catch(err){ toast("Upload didn't go through — check your signal and try again"); }
+      finally{ vBtn.disabled=false; vBtn.textContent=orig; }
+    });
+  })();
 
   // ===== LIVE SOCIAL NUDGE — "someone just shared" for clustered guests =====
   let lastSeenCount=null;     // total event photos at last poll

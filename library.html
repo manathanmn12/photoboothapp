@@ -258,6 +258,7 @@ footer .hri{font-family:var(--mono);font-size:9px;letter-spacing:.32em;color:var
   <button class="lb-close" id="lbClose" aria-label="Close">✕</button>
   <button class="lb-nav prev" id="lbPrev" aria-label="Previous">‹</button>
   <img id="lbImg" alt="">
+  <video id="lbVid" controls playsinline preload="metadata" style="display:none;max-width:100%;max-height:80vh;border-radius:12px;box-shadow:0 24px 70px rgba(0,0,0,.6)"></video>
   <button class="lb-nav next" id="lbNext" aria-label="Next">›</button>
   <div class="lb-bar">
     <span class="lb-cap" id="lbCap"></span>
@@ -316,7 +317,7 @@ function fmtRange(rows){
 
 /* ---------- data ---------- */
 function loadManifest(event){
-  var url = REST + "?event_name=eq." + enc(event) + "&select=id,caption,created_at,src,cloud_url&order=created_at.asc&limit=2000";
+  var url = REST + "?event_name=eq." + enc(event) + "&select=id,caption,created_at,src,cloud_url,type,full_url&order=created_at.asc&limit=2000";
   return fetch(url, { headers: HEADERS }).then(function(r){
     if(!r.ok) throw new Error("HTTP " + r.status);
     return r.json();
@@ -385,9 +386,9 @@ function renderGrid(){
   var html = '<div class="grid" id="grid">';
   photos.forEach(function(p, i){
     var thumb = cldUrl(p.cloud_url, CLD_THUMB);
-    html += '<figure class="tile" data-id="'+p.id+'" data-idx="'+i+'"'+(thumb ? ' data-thumb="'+esc(thumb)+'"' : '')+'>'
+    html += '<figure class="tile" data-id="'+p.id+'" data-idx="'+i+'" data-type="'+(p.type||'photo')+'"'+(thumb ? ' data-thumb="'+esc(thumb)+'"' : '')+'>'
           +   '<div class="ph"></div>'
-          +   '<img alt="'+esc(p.caption)+'" decoding="async">'
+          +   '<img alt="'+esc(p.caption)+'" decoding="async">'+(p.type==='video'?'<span style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);z-index:2;width:48px;height:48px;border-radius:50%;background:rgba(7,19,18,.6);border:2px solid rgba(243,235,219,.7);display:flex;align-items:center;justify-content:center;color:#fff;font-size:16px;padding-left:3px;pointer-events:none">▶</span>':'')
           +   '<span class="zoom"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#F3EBDB" stroke-width="2.4"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.5" y2="16.5"/></svg></span>'
           +   '<figcaption>'+esc(p.caption)+'</figcaption>'
           + '</figure>';
@@ -430,11 +431,22 @@ function openLB(i){
   $("lbCap").textContent = p.caption || "";
   $("lbImg").removeAttribute("src");
   $("lbPrev").disabled = (i<=0); $("lbNext").disabled = (i>=photos.length-1);
+  var vid=$("lbVid"), imgEl=$("lbImg");
+  if(p.type==='video' && p.full_url){
+    imgEl.style.display='none';
+    vid.style.display='block';
+    if(p.cloud_url){ vid.poster = cldUrl(p.cloud_url, CLD_FULL); }
+    vid.src = p.full_url;
+    try{ vid.play(); }catch(e){}
+    return;
+  }
+  try{ vid.pause(); }catch(e){} vid.removeAttribute('src'); vid.style.display='none';
+  imgEl.style.display='';
   var full = cldUrl(p.cloud_url, CLD_FULL);
-  if(full){ $("lbImg").src = full; }
-  else { fetchImage(p.id).then(function(d){ if(d && lbIdx===i) $("lbImg").src = d; }); }
+  if(full){ imgEl.src = full; }
+  else { fetchImage(p.id).then(function(d){ if(d && lbIdx===i) imgEl.src = d; }); }
 }
-function closeLB(){ $("lb").classList.remove("on"); lbIdx = -1; }
+function closeLB(){ $("lb").classList.remove("on"); lbIdx = -1; var v=$("lbVid"); if(v){ try{ v.pause(); }catch(e){} } }
 function navLB(step){ var n = lbIdx+step; if(n>=0 && n<photos.length) openLB(n); }
 
 /* ---------- downloads ---------- */
@@ -453,6 +465,14 @@ function safeName(){ return (EVENT||"OxygenBar360").replace(/[^a-z0-9]+/gi,"-").
 
 function downloadOne(i){
   var p = photos[i];
+  if(p.type==='video' && p.full_url){
+    toast("Preparing video…", 0);
+    fetch(p.full_url).then(function(r){ return r.blob(); }).then(function(b){
+      var ext=(b.type&&b.type.indexOf('quicktime')>-1)?'mov':((b.type&&b.type.indexOf('webm')>-1)?'webm':'mp4');
+      saveBlob(b, safeName()+"-"+String(i+1).padStart(2,"0")+"."+ext); toast("Saved");
+    }).catch(function(){ toast("Video unavailable"); });
+    return;
+  }
   toast("Preparing photo…", 0);
   if(p.cloud_url){
     fetch(p.cloud_url).then(function(r){ return r.blob(); }).then(function(b){
